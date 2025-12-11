@@ -79,6 +79,7 @@ def encode_texts(texts: List[str], embedding_model: str, api_key: str = None, mo
             
     return np.array(embeddings_list)
 
+@st.cache_data
 def chunk_text_fixed(text, chunk_size=500, overlap=True):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     sentences = [s.strip() for s in sentences if s.strip()]
@@ -115,6 +116,7 @@ def chunk_text_fixed(text, chunk_size=500, overlap=True):
     
     return chunks
 
+@st.cache_data
 def semantic_chunking(text, threshold_percentile=90, min_chunk_len=100):
     sentences = re.split(r'(?<=[.!?])\s+', text)
     sentences = [s for s in sentences if s.strip()]
@@ -157,7 +159,9 @@ def semantic_chunking(text, threshold_percentile=90, min_chunk_len=100):
         
     return chunks
 
-def read_pdf(file):
+@st.cache_data
+def read_pdf(file_bytes, filename):
+    file = io.BytesIO(file_bytes)
     reader = PdfReader(file)
     text = ""
     for page in reader.pages:
@@ -165,6 +169,10 @@ def read_pdf(file):
         if txt:
             text += txt + "\n"
     return text
+
+@st.cache_data
+def read_text_file(file_bytes, filename):
+    return file_bytes.decode("utf-8")
 
 st.title("Eksplorator Przestrzeni Semantycznej")
 
@@ -273,20 +281,21 @@ if manual_input:
 
 if uploaded_files:
     for uploaded_file in uploaded_files:
+        file_bytes = uploaded_file.read()
         if uploaded_file.name.endswith('.pdf'):
-            raw_text = read_pdf(uploaded_file)
+            raw_text = read_pdf(file_bytes, uploaded_file.name)
         else:
-            raw_text = uploaded_file.read().decode("utf-8")
+            raw_text = read_text_file(file_bytes, uploaded_file.name)
+        uploaded_file.seek(0)
         
         if chunking_method == "Sztywna":
             file_chunks = chunk_text_fixed(raw_text, chunk_size=chunk_len)
         else:
-            with st.spinner(f"Analiza semantyczna pliku {uploaded_file.name}..."):
-                file_chunks = semantic_chunking(
-                    raw_text, 
-                    threshold_percentile=semantic_threshold, 
-                    min_chunk_len=semantic_min_len
-                )
+            file_chunks = semantic_chunking(
+                raw_text, 
+                threshold_percentile=semantic_threshold, 
+                min_chunk_len=semantic_min_len
+            )
         
         if file_chunks:
             start_idx = len(all_texts)
